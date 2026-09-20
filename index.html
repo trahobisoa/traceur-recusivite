@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traceur de Récursivité Python - Spé NSI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        .stack-item {
+            transition: all 0.3s ease-in-out;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .stack-item.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .stack-item.returning {
+            background-color: #d1fae5; /* green-100 */
+            border-color: #10b981; /* green-500 */
+        }
+        
+        .stack-item.active {
+            background-color: #e0f2fe; /* sky-100 */
+            border-color: #38bdf8; /* sky-400 */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transform: scale(1.02);
+            z-index: 10;
+        }
+
+        .code-line {
+            transition: background-color 0.2s;
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: pre; /* Conserver l'indentation Python */
+        }
+
+        .code-line.active {
+            background-color: #fef08a; /* yellow-200 */
+            font-weight: bold;
+            color: #1e293b; /* slate-900 pour contraster avec le fond jaune */
+        }
+
+        .code-line.active span {
+            color: #1e293b !important; /* Force la lisibilité sur la ligne active */
+        }
+        
+        /* Ensure stack container handles overflow nicely */
+        #stack-container {
+            display: flex;
+            flex-direction: column-reverse; /* Newest items at the top conceptually */
+            gap: 0.5rem;
+            max-height: 550px;
+            overflow-y: auto;
+            padding: 1rem;
+            background-color: white;
+            border-radius: 0.5rem;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-extrabold text-slate-900 tracking-tight mb-2">Traceur de Récursivité <span class="text-blue-600">Python</span></h1>
+            <p class="text-slate-600">Visualisez la pile d'exécution étape par étape. Adapté pour Spécialité NSI.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Panneau de Configuration et Contrôles (Col 1-4) -->
+            <div class="lg:col-span-4 flex flex-col gap-6 h-fit">
+                
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h2 class="text-xl font-bold mb-4 text-slate-800 border-b pb-2 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        Configuration
+                    </h2>
+                    
+                    <div class="mb-4">
+                        <label for="algo-select" class="block text-sm font-medium text-slate-700 mb-1">Algorithme / Fonction</label>
+                        <select id="algo-select" class="w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-slate-50">
+                            <option value="ex1_produit">Produit (additions successives)</option>
+                            <option value="ex2_affiche">Affichage d'entiers</option>
+                            <option value="ex3_f">Entiers qui croissent et décroissent</option>
+                            <option value="ex5_appartient">Appartenance à un tableau</option>
+                            <option value="ex6_somme">Somme de nombres</option>
+                            <option value="ex7_longueur">Longueur d'une chaîne</option>
+                            <option value="ex8_maximum">Valeur maximale d'un tableau</option>
+                            <option value="ex9_binaire">Représentation binaire</option>
+                            <option value="ex10_palindrome">Palindromes</option>
+                            <option value="factorielle">Factorielle</option>
+                            <option value="fibonacci">Fibonacci</option>
+                            <option value="pgcd">PGCD (Euclide)</option>
+                        </select>
+                    </div>
+
+                    <div id="dynamic-inputs-container" class="mb-4 flex flex-col gap-3">
+                        <!-- Inputs generated by JS -->
+                    </div>
+
+                    <button id="btn-start" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded shadow transition-colors">
+                        Générer la Trace
+                    </button>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h2 class="text-xl font-bold mb-4 text-slate-800 border-b pb-2 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Contrôles
+                    </h2>
+                    <div class="flex flex-col gap-3">
+                        <button id="btn-next" disabled class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-4 rounded shadow transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                            </svg>
+                            Étape Suivante
+                        </button>
+                        
+                        <div class="flex gap-2">
+                            <button id="btn-prev" disabled class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm flex justify-center items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                                </svg>
+                                Précédent
+                            </button>
+                            <button id="btn-auto" disabled class="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm flex justify-center items-center">
+                                Lecture auto
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
+                        <strong>Statut :</strong> <span id="status-text">En attente d'initialisation.</span>
+                     </div>
+                </div>
+
+            </div>
+
+            <!-- Panneau Principal d'Affichage (Col 5-12) -->
+            <div class="lg:col-span-8 flex flex-col gap-6">
+                
+                <!-- Code Viewer (Python) -->
+                <div class="bg-[#1e1e1e] rounded-xl shadow-lg overflow-hidden flex flex-col h-72">
+                    <div class="bg-[#2d2d2d] px-4 py-2 text-slate-300 text-sm font-mono flex items-center justify-between border-b border-[#3d3d3d]">
+                        <div class="flex items-center">
+                            <div class="flex space-x-2 mr-4">
+                                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                                <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                            </div>
+                            <span id="code-title" class="text-blue-300 font-bold">script.py</span>
+                        </div>
+                        <span class="text-xs text-slate-500">Python 3</span>
+                    </div>
+                    <div class="p-4 overflow-auto flex-1 font-mono text-sm text-[#d4d4d4]" id="code-display">
+                        <!-- Code lines will be injected here -->
+                    </div>
+                </div>
+
+                <!-- Call Stack -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col flex-1 min-h-[400px]">
+                    <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
+                        <h2 class="text-xl font-bold text-slate-800 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            Pile d'exécution (Call Stack)
+                        </h2>
+                        <span class="text-xs font-semibold px-3 py-1 bg-slate-200 text-slate-700 rounded-full" id="stack-depth">Profondeur: 0</span>
+                    </div>
+                    
+                    <div class="flex-1 p-4 bg-slate-100 relative">
+                        <div class="absolute bottom-4 left-4 right-4 h-2 bg-slate-300 rounded-full z-0 opacity-50"></div>
+                        
+                        <div id="stack-container" class="h-full z-10 relative">
+                            <div class="h-full flex flex-col items-center justify-center text-slate-400 italic" id="empty-stack-msg">
+                                <svg class="w-12 h-12 mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                                La pile est vide. Cliquez sur Générer pour commencer.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const algorithms = {
+            ex1_produit: {
+                title: "Produit par sommes successives",
+                inputs: [
+                    { id: 'a', label: 'Valeur de a (réel/entier)', type: 'number', default: '2.5' },
+                    { id: 'n', label: 'Valeur de n (entier >= 0)', type: 'number', default: '3' }
+                ],
+                code: [
+                    "def produit(a, n):", // 0
+                    '    """Calcule a*n par additions successives (n entier, a reel)."""', // 1
+                    "    if n == 0:", // 2
+                    "        return 0", // 3
+                    "    elif n > 0:", // 4
+                    "        return a + produit(a, n - 1)", // 5
+                    "    else:", // 6
+                    "        return -produit(a, -n)" // 7 (Adapté logiquement pour la démo)
+                ],
+                generateTrace: function(a, n) {
+                    let trace = [];
+                    let callIdCounter = 0;
+                    
+                    function run(currA, currN, parentId = null) {
+                        let callId = callIdCounter++;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'produit', args: { a: currA, n: currN }, line: 0, msg: `Appel: produit(${currA}, ${currN})` });
+                        trace.push({ type: 'step', id: callId, line: 2, msg: `Vérification: n == 0 ? (${currN} == 0)` });
+                        
+                        if (currN === 0) {
+                            trace.push({ type: 'step', id: callId, line: 3, msg: `Cas de base atteint.` });
+                            trace.push({ type: 'return', id: callId, line: 3, retVal: 0, msg: `Retourne 0` });
+                            return 0;
+                        } else {
+                            trace.push({ type: 'step', id: callId, line: 4, msg: `Vérification: n > 0 ? (${currN} > 0)` });
+                            if (currN > 0) {
+                                trace.push({ type: 'step', id: callId, line: 5, msg: `Appel récursif: produit(${currA}, ${currN - 1})` });
+                                let sub = run(currA, currN - 1, callId);
+                                let res = currA + sub;
+                                trace.push({ type: 'step', id: callId, line: 5, msg: `Calcul: ${currA} + ${sub} = ${res}` });
+                                trace.push({ type: 'return', id: callId, line: 5, retVal: res, msg: `Retourne ${res}` });
+                                return res;
+                            } else {
+                                trace.push({ type: 'step', id: callId, line: 7, msg: `Cas négatif: -produit(${currA}, ${-currN})` });
+                                let sub = run(currA, -currN, callId);
+                                let res = -sub;
+                                trace.push({ type: 'return', id: callId, line: 7, retVal: res, msg: `Retourne ${res}` });
+                                return res;
+                            }
+                        }
+                    }
+                    run(a, n);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+            
+            ex2_affiche: {
+                title: "Affichage d'une suite d'entiers",
+                inputs: [
+                    { id: 'i', label: 'Départ i', type: 'number', default: '2' },
+                    { id: 'k', label: 'Fin k', type: 'number', default: '5' }
+                ],
+                code: [
+                    "def affiche(i, k):", // 0
+                    '    """Affiche les entiers de i a k inclus."""', // 1
+                    "    if i <= k:", // 2
+                    '        print(i, end=" ")', // 3
+                    "        affiche(i + 1, k)" // 4
+                ],
+                generateTrace: function(i, k) {
+                    let trace = [];
+                    let callIdCounter = 0;
+                    function run(currI, currK, parentId = null) {
+                        let callId = callIdCounter++;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'affiche', args: { i: currI, k: currK }, line: 0, msg: `Appel: affiche(${currI}, ${currK})` });
+                        trace.push({ type: 'step', id: callId, line: 2, msg: `Vérification: ${currI} <= ${currK} ?` });
+                        if (currI <= currK) {
+                            trace.push({ type: 'step', id: callId, line: 3, msg: `Affiche (Console): ${currI}` });
+                            trace.push({ type: 'step', id: callId, line: 4, msg: `Appel récursif: affiche(${currI + 1}, ${currK})` });
+                            run(currI + 1, currK, callId);
+                        }
+                        trace.push({ type: 'return', id: callId, line: 4, retVal: 'None', msg: `Fin de la fonction, retour implicite (None).` });
+                    }
+                    run(i, k);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+
+            ex3_f: {
+                title: "Entiers qui croissent et décroissent",
+                inputs: [
+                    { id: 'n', label: 'Valeur de n', type: 'number', default: '3' }
+                ],
+                code: [
+                    "def f(n):", // 0
+                    '    print(n, end="")', // 1
+                    "    if n != 0:", // 2
+                    "        f(n - 1)", // 3
+                    '    print(n, end="")' // 4
+                ],
+                generateTrace: function(n) {
+                    let trace = [];
+                    let callIdCounter = 0;
+                    function run(currN, parentId = null) {
+                        let callId = callIdCounter++;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'f', args: { n: currN }, line: 0, msg: `Appel: f(${currN})` });
+                        trace.push({ type: 'step', id: callId, line: 1, msg: `Affiche (descente): ${currN}` });
+                        trace.push({ type: 'step', id: callId, line: 2, msg: `Vérification: ${currN} != 0 ?` });
+                        
+                        if (currN !== 0) {
+                            trace.push({ type: 'step', id: callId, line: 3, msg: `Appel récursif: f(${currN - 1})` });
+                            run(currN - 1, callId);
+                        }
+                        trace.push({ type: 'step', id: callId, line: 4, msg: `Affiche (remontée): ${currN}` });
+                        trace.push({ type: 'return', id: callId, line: 4, retVal: 'None', msg: `Fin de l'appel f(${currN})` });
+                    }
+                    run(n);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+
+            ex5_appartient: {
+                title: "Appartenance à un tableau",
+                inputs: [
+                    { id: 'val', label: 'Valeur cherchée', type: 'number', default: '7' },
+                    { id: 'liste', label: 'Liste (séparée par des virgules)', type: 'array', default: '3, 5, 7, 9, 0' },
+                    { id: 'idx', label: 'Indice de départ', type: 'number', default: '0' }
+                ],
+                code: [
+                    "def appartient(valeur, liste, indice):", // 0
+                    '    """Renvoie True si valeur est presente dans liste a partir de indice."""', // 1
+                    "    if indice >= len(liste):", // 2
+                    "        return False", // 3
+                    "    elif liste[indice] == valeur:", // 4
+                    "        return True", // 5
+                    "    else:", // 6
+                    "        return appartient(valeur, liste, indice + 1)" // 7
+                ],
+                generateTrace: function(val, liste, idx) {
+                    let trace = [];
+                    let callIdCounter = 0;
+                    function run(cVal, cListe, cIdx, parentId = null) {
+                        let callId = callIdCounter++;
+                        let listStr = `[${cListe.join(',')}]`;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'appartient', args: { valeur: cVal, liste: listStr, indice: cIdx }, line: 0, msg: `Appel sur l'indice ${cIdx}` });
+                        
+                        trace.push({ type: 'step', id: callId, line: 2, msg: `Vérification: ${cIdx} >= ${cListe.length} (Fin de liste ?) ` });
+                        if (cIdx >= cListe.length) {
+                            trace.push({ type: 'step', id: callId, line: 3, msg: `Fin de liste atteinte.` });
+                            trace.push({ type: 'return', id: callId, line: 3, retVal: 'False', msg: `Retourne False` });
+                            return 'False';
+                        } else {
+                            trace.push({ type: 'step', id: callId, line: 4, msg: `Vérification: liste[${cIdx}] == ${cVal} ? (${cListe[cIdx]} == ${cVal})` });
+                            if (cListe[cIdx] === cVal) {
+                                trace.push({ type: 'step', id: callId, line: 5, msg: `Valeur trouvée !` });
+                                trace.push({ type: 'return', id: callId, line: 5, retVal: 'True', msg: `Retourne True` });
+                                return 'True';
+                            } else {
+                                trace.push({ type: 'step', id: callId, line: 7, msg: `Pas trouvé. Recherche à l'indice ${cIdx + 1}` });
+                                let res = run(cVal, cListe, cIdx + 1, callId);
+                                trace.push({ type: 'step', id: callId, line: 7, msg: `Fait remonter le résultat: ${res}` });
+                                trace.push({ type: 'return', id: callId, line: 7, retVal: res, msg: `Retourne ${res}` });
+                                return res;
+                            }
+                        }
+                    }
+                    run(val, liste, idx);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+
+            ex6_somme: {
+                title: "Somme de nombres",
+                inputs: [
+                    { id: 'n', label: 'n (Nombre d\'itérations)', type: 'number', default: '5' },
+                    { id: 'm', label: 'm (Valeur de départ)', type: 'number', default: '3' }
+                ],
+                code: [
+                    "def somme(n, m):", // 0
+                    "    if n == 0:", // 1
+                    "        return m", // 2
+                    "    else:", // 3
+                    "        return somme(n - 1, m + 1)" // 4
+                ],
+                generateTrace: function(n, m) {
+                    let trace = [];
+                    let callIdCounter = 0;
+                    function run(currN, currM, parentId = null) {
+                        let callId = callIdCounter++;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'somme', args: { n: currN, m: currM }, line: 0, msg: `Appel: somme(${currN}, ${currM})` });
+                        trace.push({ type: 'step', id: callId, line: 1, msg: `Vérification: ${currN} == 0 ?` });
+                        
+                        if (currN === 0) {
+                            trace.push({ type: 'return', id: callId, line: 2, retVal: currM, msg: `Cas de base: Retourne m = ${currM}` });
+                            return currM;
+                        } else {
+                            trace.push({ type: 'step', id: callId, line: 4, msg: `Appel récursif avec n-1 et m+1` });
+                            let res = run(currN - 1, currM + 1, callId);
+                            trace.push({ type: 'return', id: callId, line: 4, retVal: res, msg: `Fait remonter ${res}` });
+                            return res;
+                        }
+                    }
+                    run(n, m);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+
+            ex7_longueur: {
+                title: "Longueur d'une chaîne",
+                inputs: [
+                    { id: 'chaine', label: 'Chaîne de caractères', type: 'text', default: 'NSI' }
+                ],
+                code: [
+                    "def longueur(chaine):", // 0
+                    '    if chaine == "":', // 1
+                    "        return 0", // 2
+                    "    else:", // 3
+                    "        return 1 + longueur(chaine[1:])" // 4
+                ],
+                generateTrace: function(chaine) {
+                    let trace = [];
+                    let callIdCounter = 0;
+                    function run(cStr, parentId = null) {
+                        let callId = callIdCounter++;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'longueur', args: { chaine: `"${cStr}"` }, line: 0, msg: `Appel pour la chaîne "${cStr}"` });
+                        trace.push({ type: 'step', id: callId, line: 1, msg: `Est-ce que "${cStr}" est vide ?` });
+                        
+                        if (cStr === "") {
+                            trace.push({ type: 'return', id: callId, line: 2, retVal: 0, msg: `Chaîne vide, retourne 0` });
+                            return 0;
+                        } else {
+                            let reste = cStr.substring(1);
+                            trace.push({ type: 'step', id: callId, line: 4, msg: `1 + longueur du reste ("${reste}")` });
+                            let sub = run(reste, callId);
+                            let res = 1 + sub;
+                            trace.push({ type: 'step', id: callId, line: 4, msg: `Calcul: 1 + ${sub} = ${res}` });
+                            trace.push({ type: 'return', id: callId, line: 4, retVal: res, msg: `Retourne ${res}` });
+                            return res;
+                        }
+                    }
+                    run(chaine);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+
+            ex8_maximum: {
+                title: "Valeur maximale d'un tableau",
+                inputs: [
+                    { id: 'tab', label: 'Tableau d\'entiers (séparés par virgule)', type: 'array', default: '3, 7, 2, 9, 4' }
+                ],
+                code: [
+                    "def maximum(tab):", // 0
+                    "    if len(tab) == 1:", // 1
+                    "        return tab[0]", // 2
+                    "    else:", // 3
+                    "        max_reste = maximum(tab[1:])", // 4
+                    "        if tab[0] > max_reste:", // 5
+                    "            return tab[0]", // 6
+                    "        else:", // 7
+                    "            return max_reste" // 8
+                ],
+                generateTrace: function(tab) {
+                    let trace = [];
+                    let callIdCounter = 0;
+                    function run(cTab, parentId = null) {
+                        let callId = callIdCounter++;
+                        let tabStr = `[${cTab.join(',')}]`;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'maximum', args: { tab: tabStr }, line: 0, msg: `Appel: maximum(${tabStr})` });
+                        trace.push({ type: 'step', id: callId, line: 1, msg: `Vérification: taille == 1 ? (${cTab.length} == 1)` });
+                        
+                        if (cTab.length === 1) {
+                            trace.push({ type: 'return', id: callId, line: 2, retVal: cTab[0], msg: `Cas de base: Retourne ${cTab[0]}` });
+                            return cTab[0];
+                        } else {
+                            let reste = cTab.slice(1);
+                            trace.push({ type: 'step', id: callId, line: 4, msg: `Recherche du max dans le reste: [${reste.join(',')}]` });
+                            let maxReste = run(reste, callId);
+                            
+                            trace.push({ type: 'step', id: callId, line: 5, msg: `Comparaison: ${cTab[0]} > ${maxReste} ?` });
+                            if (cTab[0] > maxReste) {
+                                trace.push({ type: 'step', id: callId, line: 6, msg: `${cTab[0]} est plus grand.` });
+                                trace.push({ type: 'return', id: callId, line: 6, retVal: cTab[0], msg: `Retourne ${cTab[0]}` });
+                                return cTab[0];
+                            } else {
+                                trace.push({ type: 'step', id: callId, line: 8, msg: `${maxReste} est plus grand ou égal.` });
+                                trace.push({ type: 'return', id: callId, line: 8, retVal: maxReste, msg: `Retourne ${maxReste}` });
+                                return maxReste;
+                            }
+                        }
+                    }
+                    if(tab.length === 0) tab = [0]; // Sécurité
+                    run(tab);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+
+            ex9_binaire: {
+                title: "Représentation binaire",
+                inputs: [
+                    { id: 'n', label: 'Entier N', type: 'number', default: '13' }
+                ],
+                code: [
+                    "def binaire(n):", // 0
+                    '    """Affiche la representation binaire de l\'entier positif n."""', // 1
+                    "    if n == 0:", // 2
+                    "        return", // 3
+                    "    else:", // 4
+                    "        binaire(n // 2)", // 5
+                    '        print(n % 2, end="")' // 6
+                ],
+                generateTrace: function(n) {
+                    let trace = [];
+                    let callIdCounter = 0;
+                    function run(currN, parentId = null) {
+                        let callId = callIdCounter++;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'binaire', args: { n: currN }, line: 0, msg: `Appel pour n=${currN}` });
+                        trace.push({ type: 'step', id: callId, line: 2, msg: `Vérification: ${currN} == 0 ?` });
+                        
+                        if (currN === 0) {
+                            trace.push({ type: 'return', id: callId, line: 3, retVal: 'None', msg: `Retour sans rien afficher` });
+                            return;
+                        } else {
+                            let quotient = Math.floor(currN / 2);
+                            trace.push({ type: 'step', id: callId, line: 5, msg: `Appel avec quotient entier: ${currN} // 2 = ${quotient}` });
+                            run(quotient, callId);
+                            
+                            let reste = currN % 2;
+                            trace.push({ type: 'step', id: callId, line: 6, msg: `Affiche le reste: ${currN} % 2 = ${reste}` });
+                            trace.push({ type: 'return', id: callId, line: 6, retVal: 'None', msg: `Fin de fonction` });
+                        }
+                    }
+                    run(n);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+
+            ex10_palindrome: {
+                title: "Palindromes",
+                inputs: [
+                    { id: 'mot', label: 'Mot à tester', type: 'text', default: 'radar' }
+                ],
+                code: [
+                    "def est_palindrome(mot):", // 0
+                    "    if len(mot) <= 1:", // 1
+                    "        return True", // 2
+                    "    elif mot[0] != mot[-1]:", // 3
+                    "        return False", // 4
+                    "    else:", // 5
+                    "        return est_palindrome(mot[1:-1])" // 6
+                ],
+                generateTrace: function(mot) {
+                    let trace = [];
+                    let callIdCounter = 0;
+                    function run(cMot, parentId = null) {
+                        let callId = callIdCounter++;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'est_palindrome', args: { mot: `"${cMot}"` }, line: 0, msg: `Test du mot "${cMot}"` });
+                        trace.push({ type: 'step', id: callId, line: 1, msg: `Taille du mot <= 1 ? (${cMot.length} <= 1)` });
+                        
+                        if (cMot.length <= 1) {
+                            trace.push({ type: 'step', id: callId, line: 2, msg: `Cas de base atteint.` });
+                            trace.push({ type: 'return', id: callId, line: 2, retVal: 'True', msg: `Retourne True` });
+                            return 'True';
+                        } else {
+                            let first = cMot[0];
+                            let last = cMot[cMot.length - 1];
+                            trace.push({ type: 'step', id: callId, line: 3, msg: `Extrémités diffèrent ? ("${first}" != "${last}")` });
+                            
+                            if (first !== last) {
+                                trace.push({ type: 'step', id: callId, line: 4, msg: `Pas un palindrome.` });
+                                trace.push({ type: 'return', id: callId, line: 4, retVal: 'False', msg: `Retourne False` });
+                                return 'False';
+                            } else {
+                                let reste = cMot.substring(1, cMot.length - 1);
+                                trace.push({ type: 'step', id: callId, line: 6, msg: `Extrémités ok. Test sur le reste: "${reste}"` });
+                                let res = run(reste, callId);
+                                trace.push({ type: 'step', id: callId, line: 6, msg: `Remonte le résultat: ${res}` });
+                                trace.push({ type: 'return', id: callId, line: 6, retVal: res, msg: `Retourne ${res}` });
+                                return res;
+                            }
+                        }
+                    }
+                    run(mot);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+
+            factorielle: {
+                title: "Factorielle",
+                inputs: [ { id: 'n', label: 'Valeur de n', type: 'number', default: '4' } ],
+                code: [
+                    "def factorielle(n):", // 0
+                    '    """Calcule la factorielle de n."""', // 1
+                    "    if n == 0:", // 2
+                    "        return 1", // 3
+                    "    else:", // 4
+                    "        sub_result = factorielle(n - 1)", // 5
+                    "        return n * sub_result" // 6
+                ],
+                generateTrace: function(n) {
+                    let trace = []; let callIdCounter = 0;
+                    function run(currN, parentId = null) {
+                        let callId = callIdCounter++;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'factorielle', args: { n: currN }, line: 0, msg: `Appel: factorielle(${currN})` });
+                        trace.push({ type: 'step', id: callId, line: 2, msg: `Vérification: ${currN} == 0 ?` });
+                        
+                        if (currN === 0) {
+                            trace.push({ type: 'return', id: callId, line: 3, retVal: 1, msg: `Retourne 1` });
+                            return 1;
+                        } else {
+                            trace.push({ type: 'step', id: callId, line: 5, msg: `Calcul de factorielle(${currN - 1})` });
+                            let sub = run(currN - 1, callId);
+                            trace.push({ type: 'step', id: callId, line: 5, msg: `Reçu: ${sub}` });
+                            let res = currN * sub;
+                            trace.push({ type: 'step', id: callId, line: 6, msg: `Calcul: ${currN} * ${sub} = ${res}` });
+                            trace.push({ type: 'return', id: callId, line: 6, retVal: res, msg: `Retourne ${res}` });
+                            return res;
+                        }
+                    }
+                    run(n);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+
+            fibonacci: {
+                title: "Fibonacci",
+                inputs: [ { id: 'n', label: 'Rang n', type: 'number', default: '4' } ],
+                code: [
+                    "def fibonacci(n):", // 0
+                    '    """Calcule le n-ieme terme de Fibonacci."""', // 1
+                    "    if n <= 1:", // 2
+                    "        return n", // 3
+                    "    else:", // 4
+                    "        fib1 = fibonacci(n - 1)", // 5
+                    "        fib2 = fibonacci(n - 2)", // 6
+                    "        return fib1 + fib2" // 7
+                ],
+                generateTrace: function(n) {
+                    let trace = []; let callIdCounter = 0;
+                    function run(currN, parentId = null) {
+                        let callId = callIdCounter++;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'fibonacci', args: { n: currN }, line: 0, msg: `Appel: fibonacci(${currN})` });
+                        trace.push({ type: 'step', id: callId, line: 2, msg: `Vérification: ${currN} <= 1 ?` });
+                        if (currN <= 1) {
+                            trace.push({ type: 'return', id: callId, line: 3, retVal: currN, msg: `Retourne ${currN}` });
+                            return currN;
+                        } else {
+                            trace.push({ type: 'step', id: callId, line: 5, msg: `Calcul branche gauche: fibonacci(${currN - 1})` });
+                            let fib1 = run(currN - 1, callId);
+                            trace.push({ type: 'step', id: callId, line: 5, msg: `Reçu fib1: ${fib1}` });
+                            
+                            trace.push({ type: 'step', id: callId, line: 6, msg: `Calcul branche droite: fibonacci(${currN - 2})` });
+                            let fib2 = run(currN - 2, callId);
+                            trace.push({ type: 'step', id: callId, line: 6, msg: `Reçu fib2: ${fib2}` });
+                            
+                            let res = fib1 + fib2;
+                            trace.push({ type: 'step', id: callId, line: 7, msg: `Calcul: ${fib1} + ${fib2} = ${res}` });
+                            trace.push({ type: 'return', id: callId, line: 7, retVal: res, msg: `Retourne ${res}` });
+                            return res;
+                        }
+                    }
+                    run(n);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            },
+
+            pgcd: {
+                title: "PGCD (Algorithme d'Euclide)",
+                inputs: [ 
+                    { id: 'a', label: 'Entier a', type: 'number', default: '48' },
+                    { id: 'b', label: 'Entier b', type: 'number', default: '18' }
+                ],
+                code: [
+                    "def pgcd(a, b):", // 0
+                    '    """Calcule le PGCD de a et b."""', // 1
+                    "    if b == 0:", // 2
+                    "        return a", // 3
+                    "    else:", // 4
+                    "        reste = a % b", // 5
+                    "        return pgcd(b, reste)" // 6
+                ],
+                generateTrace: function(a, b) {
+                    let trace = []; let callIdCounter = 0;
+                    function run(cA, cB, parentId = null) {
+                        let callId = callIdCounter++;
+                        trace.push({ type: 'call', id: callId, parentId: parentId, func: 'pgcd', args: { a: cA, b: cB }, line: 0, msg: `Appel: pgcd(${cA}, ${cB})` });
+                        trace.push({ type: 'step', id: callId, line: 2, msg: `Vérification: b == 0 ? (${cB} == 0)` });
+                        
+                        if (cB === 0) {
+                            trace.push({ type: 'return', id: callId, line: 3, retVal: cA, msg: `Retourne a = ${cA}` });
+                            return cA;
+                        } else {
+                            let reste = cA % cB;
+                            trace.push({ type: 'step', id: callId, line: 5, msg: `Calcul reste: ${cA} % ${cB} = ${reste}` });
+                            trace.push({ type: 'step', id: callId, line: 6, msg: `Appel récursif: pgcd(${cB}, ${reste})` });
+                            let res = run(cB, reste, callId);
+                            trace.push({ type: 'return', id: callId, line: 6, retVal: res, msg: `Fait remonter ${res}` });
+                            return res;
+                        }
+                    }
+                    run(a, b);
+                    trace.push({type: 'done', msg: "Exécution terminée."});
+                    return trace;
+                }
+            }
+        };
+
+        let currentTrace = [];
+        let currentStepIndex = -1;
+        let autoPlayInterval = null;
+        let activeCallStack = [];
+
+        const algoSelect = document.getElementById('algo-select');
+        const inputsContainer = document.getElementById('dynamic-inputs-container');
+        const btnStart = document.getElementById('btn-start');
+        const btnNext = document.getElementById('btn-next');
+        const btnPrev = document.getElementById('btn-prev');
+        const btnAuto = document.getElementById('btn-auto');
+        
+        const codeDisplay = document.getElementById('code-display');
+        const codeTitle = document.getElementById('code-title');
+        const stackContainer = document.getElementById('stack-container');
+        const emptyStackMsg = document.getElementById('empty-stack-msg');
+        const statusText = document.getElementById('status-text');
+        const stackDepthBadge = document.getElementById('stack-depth');
+
+
+        
+        // Formatter le code avec coloration syntaxique Python
+        function formatPythonCode(line) {
+            // Protection des caractères HTML
+            line = line.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            
+            // Coloration via un seul passage pour éviter les conflits (ex: nombres dans les classes CSS)
+            const regex = /(""".*?""")|(#.*)|("[^"]*?")|\b(def|if|elif|else|return|print|for|in|while|and|or|not)\b|\b(True|False|None|len)\b|\b(\d+)\b/g;
+            
+            return line.replace(regex, (match, docstring, comment, string, kw_ctrl, kw_val, number) => {
+                if (docstring) return `<span class="text-green-500 italic">${docstring}</span>`;
+                if (comment) return `<span class="text-slate-500">${comment}</span>`;
+                if (string) return `<span class="text-orange-300">${string}</span>`;
+                if (kw_ctrl) return `<span class="text-pink-400 font-bold">${kw_ctrl}</span>`;
+                if (kw_val) return `<span class="text-blue-400">${kw_val}</span>`;
+                if (number) return `<span class="text-[#b5cea8]">${number}</span>`;
+                return match;
+            });
+        }
+
+        // Changer d'algorithme
+        algoSelect.addEventListener('change', (e) => {
+            const algoId = e.target.value;
+            loadCodeAndInputs(algoId);
+            resetState();
+        });
+
+        function loadCodeAndInputs(algoId) {
+            const algo = algorithms[algoId];
+            codeTitle.textContent = algo.title;
+            
+            // Reconstruire les inputs dynamiques
+            inputsContainer.innerHTML = '';
+            algo.inputs.forEach(inp => {
+                const div = document.createElement('div');
+                
+                const label = document.createElement('label');
+                label.className = "block text-sm font-medium text-slate-700 mb-1";
+                label.textContent = inp.label;
+                label.htmlFor = `input-${inp.id}`;
+                
+                const input = document.createElement('input');
+                input.id = `input-${inp.id}`;
+                input.type = inp.type === 'number' ? 'number' : 'text';
+                input.value = inp.default;
+                input.className = "w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-slate-50";
+                
+                div.appendChild(label);
+                div.appendChild(input);
+                inputsContainer.appendChild(div);
+            });
+            
+            // Reconstruire le code source affiché
+            codeDisplay.innerHTML = '';
+            algo.code.forEach((line, index) => {
+                const lineDiv = document.createElement('div');
+                lineDiv.className = 'code-line flex items-start';
+                lineDiv.id = `code-line-${index}`;
+                
+                const numSpan = document.createElement('span');
+                numSpan.className = 'text-[#858585] w-8 inline-block select-none shrink-0 border-r border-[#404040] mr-3 text-right pr-2';
+                numSpan.textContent = index + 1;
+                
+                const codeSpan = document.createElement('span');
+                codeSpan.className = "whitespace-pre";
+                codeSpan.innerHTML = formatPythonCode(line);
+                
+                lineDiv.appendChild(numSpan);
+                lineDiv.appendChild(codeSpan);
+                codeDisplay.appendChild(lineDiv);
+            });
+        }
+
+
+        function resetState() {
+            currentTrace = [];
+            currentStepIndex = -1;
+            activeCallStack = [];
+            
+            stackContainer.innerHTML = '';
+            stackContainer.appendChild(emptyStackMsg);
+            emptyStackMsg.style.display = 'flex';
+            
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            statusText.textContent = "En attente d'initialisation.";
+            statusText.className = "text-slate-600";
+            
+            btnNext.disabled = true;
+            btnPrev.disabled = true;
+            btnAuto.disabled = true;
+            btnAuto.innerHTML = `<svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Lecture auto`;
+            btnAuto.classList.remove('bg-red-600', 'hover:bg-red-700');
+            btnAuto.classList.add('bg-slate-800', 'hover:bg-slate-900');
+            
+            stopAutoPlay();
+            updateStackDepth();
+        }
+
+        // Initialisation au chargement de la page
+        loadCodeAndInputs(algoSelect.value);
+
+        btnStart.addEventListener('click', () => {
+            const algoId = algoSelect.value;
+            const algo = algorithms[algoId];
+            
+            // Récupérer et parser les inputs
+            let argsToPass = [];
+            let isValid = true;
+            
+            algo.inputs.forEach(inp => {
+                const rawVal = document.getElementById(`input-${inp.id}`).value;
+                if (inp.type === 'number') {
+                    const num = parseInt(rawVal);
+                    if(isNaN(num)) isValid = false;
+                    argsToPass.push(num);
+                } else if (inp.type === 'array') {
+                    // split par virgule et nettoyer
+                    const arr = rawVal.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+                    if(arr.length === 0) isValid = false;
+                    argsToPass.push(arr);
+                } else {
+                    argsToPass.push(rawVal); // string par défaut
+                }
+            });
+            
+            if (!isValid) {
+                alert("Erreur de saisie. Vérifiez vos entrées (nombres ou listes de nombres valides).");
+                return;
+            }
+
+            resetState();
+            currentTrace = algo.generateTrace(...argsToPass);
+
+            btnNext.disabled = false;
+            btnAuto.disabled = false;
+            btnStart.textContent = "Re-générer";
+            
+            emptyStackMsg.style.display = 'none';
+            statusText.textContent = "Trace générée. Prêt à exécuter.";
+            statusText.className = "text-blue-600 font-medium";
+            
+            stepForward(); // Fait le premier pas
+        });
+
+        btnNext.addEventListener('click', stepForward);
+        btnPrev.addEventListener('click', stepBackward);
+        btnAuto.addEventListener('click', () => {
+            if (autoPlayInterval) stopAutoPlay();
+            else startAutoPlay();
+        });
+
+        function stepForward() {
+            if (currentStepIndex >= currentTrace.length - 1) return;
+            
+            currentStepIndex++;
+            const step = currentTrace[currentStepIndex];
+            
+            updateUIForStep(step, true);
+            
+            btnPrev.disabled = false;
+            if (currentStepIndex >= currentTrace.length - 1) {
+                btnNext.disabled = true;
+                stopAutoPlay();
+            }
+        }
+
+        function stepBackward() {
+            if (currentStepIndex < 0) return;
+            
+            const stepToUndo = currentTrace[currentStepIndex];
+            undoStep(stepToUndo);
+            
+            currentStepIndex--;
+            
+            if (currentStepIndex >= 0) {
+                const prevStep = currentTrace[currentStepIndex];
+                restoreVisualState(prevStep);
+            } else {
+                resetState();
+                btnStart.textContent = "Générer la Trace";
+            }
+            
+            btnNext.disabled = false;
+            if (currentStepIndex < 0) btnPrev.disabled = true;
+        }
+
+        function updateUIForStep(step, animate) {
+            // Highlight du code python
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (step.line !== undefined) {
+                const lineEl = document.getElementById(`code-line-${step.line}`);
+                if (lineEl) {
+                    lineEl.classList.add('active');
+                    // Scroll automatique du code si dépassement
+                    lineEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+
+            // Mise à jour de la barre d'état
+            statusText.textContent = step.msg;
+            if (step.type === 'return') statusText.className = "text-emerald-600 font-bold";
+            else if (step.type === 'call') statusText.className = "text-blue-600 font-bold";
+            else if (step.type === 'done') statusText.className = "text-purple-600 font-bold";
+            else statusText.className = "text-slate-700";
+
+            // Gestion des éléments visuels de la pile
+            if (step.type === 'call') {
+                createStackFrame(step, animate);
+            } else if (step.type === 'return') {
+                updateStackFrameReturn(step);
+            } else if (step.type === 'step') {
+                highlightActiveFrame(step.id);
+            }
+        }
+
+        function createStackFrame(step, animate) {
+            const frame = document.createElement('div');
+            frame.id = `stack-frame-${step.id}`;
+            frame.className = `stack-item bg-white border-2 border-slate-200 rounded-lg p-3 shadow-sm flex flex-col gap-1 w-full relative overflow-hidden transition-all duration-300`;
+            
+            // Format des arguments Python style
+            const argsStr = Object.entries(step.args).map(([k, v]) => `${k}=${v}`).join(', ');
+            
+            frame.innerHTML = `
+                <div class="flex justify-between items-center border-b pb-1 mb-1 border-slate-100">
+                    <span class="font-bold text-slate-800 font-mono text-sm">${step.func}(<span class="text-blue-600">${argsStr}</span>)</span>
+                    <span class="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">ID: ${step.id}</span>
+                </div>
+                <div class="text-sm text-slate-600 flex justify-between items-end h-6 font-mono">
+                    <span class="state-text">En exécution...</span>
+                    <span class="return-val text-lg font-bold text-emerald-600 hidden"></span>
+                </div>
+                ${step.parentId !== null ? `<div class="absolute -bottom-2 left-6 w-0.5 h-4 bg-slate-300"></div>` : ''}
+            `;
+            
+            stackContainer.appendChild(frame);
+            activeCallStack.push({id: step.id, element: frame});
+            
+            if (animate) void frame.offsetWidth; // Force Reflow
+            frame.classList.add('show', 'active');
+            
+            activeCallStack.forEach(item => {
+                if(item.id !== step.id) item.element.classList.remove('active');
+            });
+            
+            updateStackDepth();
+            stackContainer.scrollTop = stackContainer.scrollHeight;
+        }
+
+        function updateStackFrameReturn(step) {
+            const frame = document.getElementById(`stack-frame-${step.id}`);
+            if (frame) {
+                frame.classList.remove('active');
+                frame.classList.add('returning');
+                
+                const stateText = frame.querySelector('.state-text');
+                const returnVal = frame.querySelector('.return-val');
+                
+                stateText.textContent = "Retourne :";
+                returnVal.textContent = step.retVal;
+                returnVal.classList.remove('hidden');
+                
+                // Effet visuel remontée
+                if (step.parentId !== null) {
+                    const parentFrame = document.getElementById(`stack-frame-${step.parentId}`);
+                    if(parentFrame) {
+                        setTimeout(() => {
+                            parentFrame.classList.add('border-emerald-300', 'bg-emerald-50');
+                            setTimeout(() => {
+                                parentFrame.classList.remove('border-emerald-300', 'bg-emerald-50');
+                                parentFrame.classList.add('active');
+                            }, 500);
+                        }, 300);
+                    }
+                }
+            }
+        }
+
+        function highlightActiveFrame(id) {
+            activeCallStack.forEach(item => {
+                if(item.id === id) {
+                    item.element.classList.add('active');
+                    item.element.classList.remove('returning');
+                    item.element.querySelector('.state-text').textContent = "En exécution...";
+                    item.element.querySelector('.return-val').classList.add('hidden');
+                } else {
+                    item.element.classList.remove('active');
+                }
+            });
+        }
+
+        function undoStep(step) {
+            if (step.type === 'call') {
+                const frame = document.getElementById(`stack-frame-${step.id}`);
+                if (frame) {
+                    frame.remove();
+                    activeCallStack = activeCallStack.filter(item => item.id !== step.id);
+                }
+                updateStackDepth();
+            } else if (step.type === 'return') {
+                const frame = document.getElementById(`stack-frame-${step.id}`);
+                if (frame) {
+                    frame.classList.remove('returning');
+                    frame.classList.add('active');
+                    frame.querySelector('.state-text').textContent = "En exécution...";
+                    frame.querySelector('.return-val').classList.add('hidden');
+                }
+            }
+        }
+        
+        function restoreVisualState(step) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (step.line !== undefined) {
+                const lineEl = document.getElementById(`code-line-${step.line}`);
+                if(lineEl) lineEl.classList.add('active');
+            }
+            statusText.textContent = step.msg;
+            if (step.id !== undefined) highlightActiveFrame(step.id);
+        }
+
+        function updateStackDepth() {
+            const depth = document.querySelectorAll('.stack-item').length;
+            stackDepthBadge.textContent = `Profondeur maximale: ${depth}`;
+            if(depth > 5) {
+                stackDepthBadge.classList.add('bg-red-100', 'text-red-700');
+                stackDepthBadge.classList.remove('bg-slate-200', 'text-slate-700');
+            } else {
+                stackDepthBadge.classList.remove('bg-red-100', 'text-red-700');
+                stackDepthBadge.classList.add('bg-slate-200', 'text-slate-700');
+            }
+        }
+
+        function startAutoPlay() {
+            btnAuto.innerHTML = `<svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>Arrêter`;
+            btnAuto.classList.remove('bg-slate-800', 'hover:bg-slate-900');
+            btnAuto.classList.add('bg-red-600', 'hover:bg-red-700');
+            
+            btnNext.disabled = true;
+            btnPrev.disabled = true;
+            
+            autoPlayInterval = setInterval(() => {
+                if (currentStepIndex >= currentTrace.length - 1) {
+                    stopAutoPlay();
+                } else {
+                    stepForward();
+                }
+            }, 1000); // 1 seconde par étape
+        }
+
+        function stopAutoPlay() {
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+            }
+            btnAuto.innerHTML = `<svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Lecture auto`;
+            btnAuto.classList.remove('bg-red-600', 'hover:bg-red-700');
+            btnAuto.classList.add('bg-slate-800', 'hover:bg-slate-900');
+            
+            if (currentTrace.length > 0) {
+                if (currentStepIndex < currentTrace.length - 1) btnNext.disabled = false;
+                if (currentStepIndex > 0) btnPrev.disabled = false;
+            }
+        }
+
+    </script>
+</body>
+</html>
