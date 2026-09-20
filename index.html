@@ -66,15 +66,15 @@
         }
     </style>
 </head>
-<body class="text-slate-800 min-h-screen p-4 md:p-8">
+<body class="text-slate-800 min-h-screen p-4 md:p-8 flex flex-col">
 
-    <div class="max-w-7xl mx-auto">
+    <div class="max-w-7xl mx-auto flex-1 w-full flex flex-col">
         <header class="mb-8 text-center">
             <h1 class="text-4xl font-extrabold text-slate-900 tracking-tight mb-2">Traceur de Récursivité <span class="text-blue-600">Python</span></h1>
             <p class="text-slate-600">Visualisez la pile d'exécution étape par étape. Adapté pour Spécialité NSI.</p>
         </header>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
             
             <!-- Panneau de Configuration et Contrôles (Col 1-4) -->
             <div class="lg:col-span-4 flex flex-col gap-6 h-fit">
@@ -88,8 +88,8 @@
                     <div class="mb-4">
                         <label for="algo-select" class="block text-sm font-medium text-slate-700 mb-1">Algorithme / Fonction</label>
                         <select id="algo-select" class="w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-slate-50">
-                            <option value="ex1_produit">Produit (additions successives)</option>
-                            <option value="ex2_affiche">Affichage d'entiers</option>
+                            <option value="ex1_produit">Produit par sommes successives</option>
+                            <option value="ex2_affiche">Affichage d'une suite d'entiers</option>
                             <option value="ex3_f">Entiers qui croissent et décroissent</option>
                             <option value="ex5_appartient">Appartenance à un tableau</option>
                             <option value="ex6_somme">Somme de nombres</option>
@@ -99,7 +99,7 @@
                             <option value="ex10_palindrome">Palindromes</option>
                             <option value="factorielle">Factorielle</option>
                             <option value="fibonacci">Fibonacci</option>
-                            <option value="pgcd">PGCD (Euclide)</option>
+                            <option value="pgcd">PGCD (Algorithme d'Euclide)</option>
                         </select>
                     </div>
 
@@ -191,6 +191,13 @@
 
             </div>
         </div>
+        
+        <!-- Footer / Credits -->
+        <footer class="mt-8 mb-4 border-t border-slate-200 pt-6 flex justify-center text-sm text-slate-500">
+            <div>
+                Créé pour la Spécialité NSI par <span class="font-medium text-slate-700">Tantely Rahobisoa</span>
+            </div>
+        </footer>
     </div>
 
     <script>
@@ -727,14 +734,10 @@
         const statusText = document.getElementById('status-text');
         const stackDepthBadge = document.getElementById('stack-depth');
 
-
-        
-        // Formatter le code avec coloration syntaxique Python
+        // Formatter le code avec coloration syntaxique Python (Robuste)
         function formatPythonCode(line) {
-            // Protection des caractères HTML
             line = line.replace(/</g, "&lt;").replace(/>/g, "&gt;");
             
-            // Coloration via un seul passage pour éviter les conflits (ex: nombres dans les classes CSS)
             const regex = /(""".*?""")|(#.*)|("[^"]*?")|\b(def|if|elif|else|return|print|for|in|while|and|or|not)\b|\b(True|False|None|len)\b|\b(\d+)\b/g;
             
             return line.replace(regex, (match, docstring, comment, string, kw_ctrl, kw_val, number) => {
@@ -748,7 +751,6 @@
             });
         }
 
-        // Changer d'algorithme
         algoSelect.addEventListener('change', (e) => {
             const algoId = e.target.value;
             loadCodeAndInputs(algoId);
@@ -759,7 +761,6 @@
             const algo = algorithms[algoId];
             codeTitle.textContent = algo.title;
             
-            // Reconstruire les inputs dynamiques
             inputsContainer.innerHTML = '';
             algo.inputs.forEach(inp => {
                 const div = document.createElement('div');
@@ -780,7 +781,6 @@
                 inputsContainer.appendChild(div);
             });
             
-            // Reconstruire le code source affiché
             codeDisplay.innerHTML = '';
             algo.code.forEach((line, index) => {
                 const lineDiv = document.createElement('div');
@@ -800,7 +800,6 @@
                 codeDisplay.appendChild(lineDiv);
             });
         }
-
 
         function resetState() {
             currentTrace = [];
@@ -826,14 +825,12 @@
             updateStackDepth();
         }
 
-        // Initialisation au chargement de la page
         loadCodeAndInputs(algoSelect.value);
 
         btnStart.addEventListener('click', () => {
             const algoId = algoSelect.value;
             const algo = algorithms[algoId];
             
-            // Récupérer et parser les inputs
             let argsToPass = [];
             let isValid = true;
             
@@ -844,12 +841,11 @@
                     if(isNaN(num)) isValid = false;
                     argsToPass.push(num);
                 } else if (inp.type === 'array') {
-                    // split par virgule et nettoyer
                     const arr = rawVal.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
                     if(arr.length === 0) isValid = false;
                     argsToPass.push(arr);
                 } else {
-                    argsToPass.push(rawVal); // string par défaut
+                    argsToPass.push(rawVal);
                 }
             });
             
@@ -869,7 +865,7 @@
             statusText.textContent = "Trace générée. Prêt à exécuter.";
             statusText.className = "text-blue-600 font-medium";
             
-            stepForward(); // Fait le premier pas
+            stepForward();
         });
 
         btnNext.addEventListener('click', stepForward);
@@ -915,25 +911,21 @@
         }
 
         function updateUIForStep(step, animate) {
-            // Highlight du code python
             document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
             if (step.line !== undefined) {
                 const lineEl = document.getElementById(`code-line-${step.line}`);
                 if (lineEl) {
                     lineEl.classList.add('active');
-                    // Scroll automatique du code si dépassement
                     lineEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
             }
 
-            // Mise à jour de la barre d'état
             statusText.textContent = step.msg;
             if (step.type === 'return') statusText.className = "text-emerald-600 font-bold";
             else if (step.type === 'call') statusText.className = "text-blue-600 font-bold";
             else if (step.type === 'done') statusText.className = "text-purple-600 font-bold";
             else statusText.className = "text-slate-700";
 
-            // Gestion des éléments visuels de la pile
             if (step.type === 'call') {
                 createStackFrame(step, animate);
             } else if (step.type === 'return') {
@@ -948,7 +940,6 @@
             frame.id = `stack-frame-${step.id}`;
             frame.className = `stack-item bg-white border-2 border-slate-200 rounded-lg p-3 shadow-sm flex flex-col gap-1 w-full relative overflow-hidden transition-all duration-300`;
             
-            // Format des arguments Python style
             const argsStr = Object.entries(step.args).map(([k, v]) => `${k}=${v}`).join(', ');
             
             frame.innerHTML = `
@@ -966,7 +957,7 @@
             stackContainer.appendChild(frame);
             activeCallStack.push({id: step.id, element: frame});
             
-            if (animate) void frame.offsetWidth; // Force Reflow
+            if (animate) void frame.offsetWidth; 
             frame.classList.add('show', 'active');
             
             activeCallStack.forEach(item => {
@@ -990,7 +981,6 @@
                 returnVal.textContent = step.retVal;
                 returnVal.classList.remove('hidden');
                 
-                // Effet visuel remontée
                 if (step.parentId !== null) {
                     const parentFrame = document.getElementById(`stack-frame-${step.parentId}`);
                     if(parentFrame) {
